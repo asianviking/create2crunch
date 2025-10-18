@@ -36,8 +36,8 @@ static KERNEL_SRC: &str = include_str!("./kernels/keccak256.cl");
 /// keccak-256 hash of the bytecode that is provided by the contract calling
 /// CREATE2 that will be used to initialize the new contract. An additional set
 /// of three optional values may be provided: a device to target for OpenCL GPU
-/// search, a threshold for leading zeroes to search for, and a threshold for
-/// total zeroes to search for.
+/// search, a threshold for leading 0x1 hex digits to search for, and a threshold for
+/// total 0x1 hex digits to search for.
 pub struct Config {
     pub factory_address: [u8; 20],
     pub calling_address: [u8; 20],
@@ -103,17 +103,17 @@ impl Config {
             return Err("invalid gpu device value");
         };
         let Ok(leading_zeroes_threshold) = leading_zeroes_threshold_string.parse::<u8>() else {
-            return Err("invalid leading zeroes threshold value supplied");
+            return Err("invalid leading 0x1 hex digits threshold value supplied");
         };
         let Ok(total_zeroes_threshold) = total_zeroes_threshold_string.parse::<u8>() else {
-            return Err("invalid total zeroes threshold value supplied");
+            return Err("invalid total 0x1 hex digits threshold value supplied");
         };
 
-        if leading_zeroes_threshold > 20 {
-            return Err("invalid value for leading zeroes threshold argument. (valid: 0..=20)");
+        if leading_zeroes_threshold > 40 {
+            return Err("invalid value for leading 0x1 hex digits threshold argument. (valid: 0..=40)");
         }
-        if total_zeroes_threshold > 20 && total_zeroes_threshold != 255 {
-            return Err("invalid value for total zeroes threshold argument. (valid: 0..=20 | 255)");
+        if total_zeroes_threshold > 40 && total_zeroes_threshold != 255 {
+            return Err("invalid value for total 0x1 hex digits threshold argument. (valid: 0..=40 | 255)");
         }
 
         Ok(Self {
@@ -184,20 +184,32 @@ pub fn cpu(config: Config) -> Result<(), Box<dyn Error>> {
                 // get the address that results from the hash
                 let address = <&Address>::try_from(&res[12..]).unwrap();
 
-                // count total and leading zero bytes
+                // count total and leading 0x1 hex digits (nibbles)
                 let mut total = 0;
-                let mut leading = 21;
+                let mut leading = 40; // 20 bytes = 40 nibbles
                 for (i, &b) in address.iter().enumerate() {
-                    if b == 0 {
+                    let high_nibble = (b >> 4) & 0x0f;
+                    let low_nibble = b & 0x0f;
+
+                    if high_nibble == 1 {
                         total += 1;
-                    } else if leading == 21 {
-                        // set leading on finding non-zero byte
-                        leading = i;
+                    }
+                    if low_nibble == 1 {
+                        total += 1;
+                    }
+
+                    // track leading 0x1 nibbles
+                    if leading == 40 {
+                        if high_nibble != 1 {
+                            leading = i * 2;
+                        } else if low_nibble != 1 {
+                            leading = i * 2 + 1;
+                        }
                     }
                 }
 
-                // only proceed if there are at least three zero bytes
-                if total < 3 {
+                // only proceed if there are at least six 0x1 nibbles total
+                if total < 6 {
                     return;
                 }
 
@@ -239,9 +251,9 @@ pub fn cpu(config: Config) -> Result<(), Box<dyn Error>> {
 /// hash of the contract initialization code, and a device ID, search for salts
 /// using OpenCL that will enable the factory contract to deploy a contract to a
 /// gas-efficient address via CREATE2. This method also takes threshold values
-/// for both leading zero bytes and total zero bytes - any address that does not
+/// for both leading 0x1 hex digits and total 0x1 hex digits - any address that does not
 /// meet or exceed the threshold will not be returned. Default threshold values
-/// are three leading zeroes or five total zeroes.
+/// are three leading 0x1 hex digits or five total 0x1 hex digits.
 ///
 /// The 32-byte salt is constructed as follows:
 ///   - the 20-byte calling address (to prevent frontrunning)
@@ -425,7 +437,7 @@ pub fn gpu(config: Config) -> ocl::Result<()> {
                 // display information about the current search criteria
                 term.write_line(&format!(
                     "current search space: {}xxxxxxxx{:08x}\t\t\
-                     threshold: {} leading or {} total zeroes",
+                     threshold: {} leading or {} total 0x1 hex digits",
                     hex::encode(salt),
                     BigEndian::read_u64(&view_buf),
                     config.leading_zeroes_threshold,
@@ -507,15 +519,27 @@ pub fn gpu(config: Config) -> ocl::Result<()> {
             // get the address that results from the hash
             let address = <&Address>::try_from(&res[12..]).unwrap();
 
-            // count total and leading zero bytes
+            // count total and leading 0x1 hex digits (nibbles)
             let mut total = 0;
-            let mut leading = 0;
+            let mut leading = 40; // 20 bytes = 40 nibbles
             for (i, &b) in address.iter().enumerate() {
-                if b == 0 {
+                let high_nibble = (b >> 4) & 0x0f;
+                let low_nibble = b & 0x0f;
+
+                if high_nibble == 1 {
                     total += 1;
-                } else if leading == 0 {
-                    // set leading on finding non-zero byte
-                    leading = i;
+                }
+                if low_nibble == 1 {
+                    total += 1;
+                }
+
+                // track leading 0x1 nibbles
+                if leading == 40 {
+                    if high_nibble != 1 {
+                        leading = i * 2;
+                    } else if low_nibble != 1 {
+                        leading = i * 2 + 1;
+                    }
                 }
             }
 

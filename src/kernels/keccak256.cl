@@ -28,7 +28,7 @@
 * liability.
 */
 
-/******** Keccak-f[1600] (for finding efficient Ethereum addresses) ********/
+/******** Keccak-f[1600] (for finding Ethereum addresses with leading 0x1 hex digits) ********/
 
 #define OPENCL_PLATFORM_UNKNOWN 0
 #define OPENCL_PLATFORM_AMD   2
@@ -189,35 +189,52 @@ static inline void keccakf(ulong *a)
 }
 
 #define hasTotal(d) ( \
-  (!(d[0])) + (!(d[1])) + (!(d[2])) + (!(d[3])) + \
-  (!(d[4])) + (!(d[5])) + (!(d[6])) + (!(d[7])) + \
-  (!(d[8])) + (!(d[9])) + (!(d[10])) + (!(d[11])) + \
-  (!(d[12])) + (!(d[13])) + (!(d[14])) + (!(d[15])) + \
-  (!(d[16])) + (!(d[17])) + (!(d[18])) + (!(d[19])) \
+  (((d[0] >> 4) == 1) + ((d[0] & 0x0f) == 1)) + \
+  (((d[1] >> 4) == 1) + ((d[1] & 0x0f) == 1)) + \
+  (((d[2] >> 4) == 1) + ((d[2] & 0x0f) == 1)) + \
+  (((d[3] >> 4) == 1) + ((d[3] & 0x0f) == 1)) + \
+  (((d[4] >> 4) == 1) + ((d[4] & 0x0f) == 1)) + \
+  (((d[5] >> 4) == 1) + ((d[5] & 0x0f) == 1)) + \
+  (((d[6] >> 4) == 1) + ((d[6] & 0x0f) == 1)) + \
+  (((d[7] >> 4) == 1) + ((d[7] & 0x0f) == 1)) + \
+  (((d[8] >> 4) == 1) + ((d[8] & 0x0f) == 1)) + \
+  (((d[9] >> 4) == 1) + ((d[9] & 0x0f) == 1)) + \
+  (((d[10] >> 4) == 1) + ((d[10] & 0x0f) == 1)) + \
+  (((d[11] >> 4) == 1) + ((d[11] & 0x0f) == 1)) + \
+  (((d[12] >> 4) == 1) + ((d[12] & 0x0f) == 1)) + \
+  (((d[13] >> 4) == 1) + ((d[13] & 0x0f) == 1)) + \
+  (((d[14] >> 4) == 1) + ((d[14] & 0x0f) == 1)) + \
+  (((d[15] >> 4) == 1) + ((d[15] & 0x0f) == 1)) + \
+  (((d[16] >> 4) == 1) + ((d[16] & 0x0f) == 1)) + \
+  (((d[17] >> 4) == 1) + ((d[17] & 0x0f) == 1)) + \
+  (((d[18] >> 4) == 1) + ((d[18] & 0x0f) == 1)) + \
+  (((d[19] >> 4) == 1) + ((d[19] & 0x0f) == 1)) \
 >= TOTAL_ZEROES)
 
 #if LEADING_ZEROES == 8
-#define hasLeading(d) (!(((uint*)d)[0]) && !(((uint*)d)[1]))
+#define hasLeading(d) ((((uint*)d)[0]) == 0x11111111u && (((uint*)d)[1]) == 0x11111111u)
 #elif LEADING_ZEROES == 7
-#define hasLeading(d) (!(((uint*)d)[0]) && !(((uint*)d)[1] & 0x00ffffffu))
+#define hasLeading(d) ((((uint*)d)[0]) == 0x11111111u && ((d[4] >> 4) == 1) && ((d[4] & 0x0f) == 1) && ((d[5] >> 4) == 1))
 #elif LEADING_ZEROES == 6
-#define hasLeading(d) (!(((uint*)d)[0]) && !(((uint*)d)[1] & 0x0000ffffu))
+#define hasLeading(d) ((((uint*)d)[0]) == 0x11111111u && ((d[4] >> 4) == 1) && ((d[4] & 0x0f) == 1))
 #elif LEADING_ZEROES == 5
-#define hasLeading(d) (!(((uint*)d)[0]) && !(((uint*)d)[1] & 0x000000ffu))
+#define hasLeading(d) ((((uint*)d)[0]) == 0x11111111u && ((d[4] >> 4) == 1))
 #elif LEADING_ZEROES == 4
-#define hasLeading(d) (!(((uint*)d)[0]))
+#define hasLeading(d) ((((uint*)d)[0]) == 0x11111111u)
 #elif LEADING_ZEROES == 3
-#define hasLeading(d) (!(((uint*)d)[0] & 0x00ffffffu))
+#define hasLeading(d) (d[0] == 0x11u && ((d[1] >> 4) == 1))
 #elif LEADING_ZEROES == 2
-#define hasLeading(d) (!(((uint*)d)[0] & 0x0000ffffu))
+#define hasLeading(d) (d[0] == 0x11u)
 #elif LEADING_ZEROES == 1
-#define hasLeading(d) (!(((uint*)d)[0] & 0x000000ffu))
+#define hasLeading(d) ((d[0] >> 4) == 1)
 #else
 static inline bool hasLeading(uchar const *d)
 {
 #pragma unroll
   for (uint i = 0; i < LEADING_ZEROES; ++i) {
-    if (d[i] != 0) return false;
+    uint byte_idx = i / 2;
+    uchar nibble = (i % 2 == 0) ? (d[byte_idx] >> 4) : (d[byte_idx] & 0x0f);
+    if (nibble != 1) return false;
   }
   return true;
 }
